@@ -1,0 +1,11 @@
+function output = MapXY(inputX,inputY)
+%MAPXY 此处显示有关此函数的摘要
+%   此处显示详细说明
+outputX=zeros(1,inputX(1,end));
+outputY=zeros(1,inputX(1,end));
+
+for i=1:size(inputX,2)
+    outputY(inputX(i))=inputY(i);
+end
+end
+
