@@ -1,4 +1,7 @@
-%计算车队列
+
+function [totalX,totalY] = GetVehicleQueue(DataA)
+%GetVehicleQueue 计算车辆队列
+%   此处显示详细说明
 
 %算法
 %日期换算成s
@@ -53,3 +56,4 @@ for i=1:size(procData,1)
 end
 toc;
 %plot(totalX,totalY)
+end

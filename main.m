@@ -1,6 +1,6 @@
 
-LoadData;
-GetVehicleQueue;
+DataA=LoadVehicleData();
+[totalX,totalY]=GetVehicleQueue(DataA);
 realLoadQueue=MapXY(fix(totalX),totalY);
 
 influenceLine=readmatrix('influenceLine.xlsx');
