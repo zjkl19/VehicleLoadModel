@@ -1,6 +1,6 @@
 function output = MapXY(inputX,inputY)
-%MAPXY 此处显示有关此函数的摘要
-%   此处显示详细说明
+%MAPXY 对totalX和totalY进行映射
+%   totalX和totalY对齐
 outputX=zeros(1,inputX(1,end));
 %outputY=zeros(1,inputX(1,end));
 inputX(1)=1;
