@@ -14,12 +14,19 @@
 tic;
 
 f=5.48;
-u=0.1767*log(f)-0.0157;    %0.1767*ln(5.48)-0.0157
+u=0.1767*log(f)-0.0157;    %0.1767*ln(5.48)-0.0157=0.285
 
+loadDataFromDb=false;
+div=1;    %数据分割大小，一般电脑单次数据处理量不能超过40000，否则内存会不足
 cutoffValue=3.0;
-criGross_Load=1*1000;    %临界重量(kg)，小于等于该重量的数据将被剔除
+criGross_Load=3*1000;    %临界重量(kg)，小于等于该重量的数据将被剔除
 span=28;    %桥梁跨径：28m
-DataA=LoadVehicleData();
+
+if loadDataFromDb
+    DataA=LoadVehicleData();
+else
+    load('DataA202106.mat');
+end
 
 %读取大樟桥2条车道的影响线
 influenceLine1=readmatrix('DaZhangInfluenceLine1');    %车辆对车辆正下方车道主梁的影响线
@@ -36,6 +43,8 @@ AxleDis_Column=21;    %21~27
 Speed_ColumnColumn=28;
 
 temp=datenum(DataA(:,1))*24*3600;    %时间换算成秒
+%d = datetime(d/24/3600,"ConvertFrom","datenum");    %相应数字转日期
+
 procData=[temp cell2mat(DataA(:,2:end))];
 procData(procData(:,Gross_Load_Column)<=criGross_Load,:)=[];
 vehicleLoadEffect=zeros(length(procData),2);    %表示1辆车对1#中梁和2#中梁的效应
@@ -46,10 +55,10 @@ for ii=1:size(procData,1)
     vehicleLoad(1,1+round(procData(ii,AxleDis_Column)/100))=procData(ii,LWheel_1_W_Column+1)+procData(ii,RWheel_1_W_Column+1);
     
     if procData(ii,Axle_Num_Column)>=3    %防止后续变量被覆盖，下同
-        vehicleLoad(1,1+round(procData(ii,AxleDis_Column)/100)+round(procData(ii,AxleDis_Column+1)/100)+round(procData(ii,AxleDis_Column+2)/100))=procData(ii,LWheel_1_W_Column+2)+procData(ii,RWheel_1_W_Column+2);
+        vehicleLoad(1,1+round(procData(ii,AxleDis_Column)/100)+round(procData(ii,AxleDis_Column+1)/100))=procData(ii,LWheel_1_W_Column+2)+procData(ii,RWheel_1_W_Column+2);
     end
     if procData(ii,Axle_Num_Column)>=4
-        vehicleLoad(1,1+round(procData(ii,AxleDis_Column)/100)+round(procData(ii,AxleDis_Column+1)/100)+round(procData(ii,AxleDis_Column+2)/100)+round(procData(ii,AxleDis_Column+3)/100))=procData(ii,LWheel_1_W_Column+3)+procData(ii,RWheel_1_W_Column+3);
+        vehicleLoad(1,1+round(procData(ii,AxleDis_Column)/100)+round(procData(ii,AxleDis_Column+1)/100)+round(procData(ii,AxleDis_Column+2)/100))=procData(ii,LWheel_1_W_Column+3)+procData(ii,RWheel_1_W_Column+3);
     end
     if procData(ii,Axle_Num_Column)>=5
         vehicleLoad(1,1+round(procData(ii,AxleDis_Column)/100)+round(procData(ii,AxleDis_Column+1)/100)+round(procData(ii,AxleDis_Column+2)/100)+round(procData(ii,AxleDis_Column+3)/100)+round(procData(ii,AxleDis_Column+4)/100))=procData(ii,LWheel_1_W_Column+4)+procData(ii,RWheel_1_W_Column+4);
@@ -74,46 +83,63 @@ end
 procData=[procData vehicleLoadEffect/100];    %数据拼接，并且将最后2列的弯矩单位改成KN*m
 temp=procData(:,1);    %基于时间数据进行聚类
 
-div=4;
-temp=procData(1:length(procData)/div,:);
+totalL=length(procData);
+TotalTime=[];    %每次在桥上产生作用的大致时间
+perTime=[];
+TotalBendingMoment1=[];TotalBendingMoment2=[];
 
-D=pdist(temp,'euclid');
-LinkD = linkage(D);      %联结稳定点
-c = cophenet(LinkD,D);   %查看聚类效果
-
-%figure;
-%[H,T] =dendrogram(LinkD,'colorthreshold','default');      %查看谱系图
-
-idx = cluster(LinkD,'cutoff',cutoffValue,'criterion','distance');
-
-maxC=max(idx);    %最大聚类数
-bendingMoment=zeros(1,maxC);
-for ii=1:maxC    %对每个聚类结果进行处理
-    cdata=procData(idx==ii,:);    %cdata:每个聚类结果
+for kk=1:div
+    divProcData=procData(1+(kk-1)*totalL/div:kk*totalL/div,:);    %基于时间数据进行聚类
     
-    if size(cdata,1)==1    %如果只有1辆车
-        if cdata(1,Lane_Id_Column)==1
-            bendingMoment(ii)=cdata(1,end-1);
-        else
-            bendingMoment(ii)=cdata(1,end-2);
-        end
-        
-    else    %如果>=2辆车
-        if sum(cdata(:,Lane_Id_Column)==1)==0    %如果没有车道1的车
-            bendingMoment(ii)=max(cdata(:,end));
-        elseif sum(cdata(:,Lane_Id_Column)==2)==0    %如果没有车道2的车
-            bendingMoment(ii)=max(cdata(:,end-1));
-        else   %两个车道的车都有，各取相应车道1辆效应最大的车的效应叠加
-            l1=cdata;l2=cdata;
-            l1(l1(:,Lane_Id_Column)==2,:)=[];
-            l2(l2(:,Lane_Id_Column)==1,:)=[];
+    D=pdist(divProcData,'euclid');
+    LinkD = linkage(D);      %联结稳定点
+    c = cophenet(LinkD,D);   %查看聚类效果
+    
+    %figure;
+    %[H,T] =dendrogram(LinkD,'colorthreshold','default');      %查看谱系图
+    
+    idx = cluster(LinkD,'cutoff',cutoffValue,'criterion','distance');
+    
+    maxC=max(idx);    %最大聚类数
+    bendingMoment1=zeros(1,maxC);    %车道1下方主梁弯矩效应
+    bendingMoment2=zeros(1,maxC);    %车道2下方主梁弯矩效应
+    for ii=1:maxC    %对每个聚类结果进行处理
+        cdata=divProcData(idx==ii,:);    %cdata:每个聚类结果
+        perTime=cdata(1,1);
+        TotalTime=[TotalTime perTime];
+        if size(cdata,1)==1    %如果只有1辆车
+            if cdata(1,Lane_Id_Column)==1
+                bendingMoment1(ii)=cdata(1,end-1);
+                bendingMoment2(ii)=cdata(1,end);
+            else
+                bendingMoment1(ii)=cdata(1,end);
+                bendingMoment2(ii)=cdata(1,end-1);
+            end
             
-            bendingMoment(ii)=max(l1(:,end-1))+max(l2(:,end));
+        else    %如果>=2辆车
+            if sum(cdata(:,Lane_Id_Column)==1)==0    %如果没有车道1的车
+                bendingMoment1(ii)=max(cdata(:,end));
+                bendingMoment2(ii)=max(cdata(:,end-1));
+            elseif sum(cdata(:,Lane_Id_Column)==2)==0    %如果没有车道2的车
+                bendingMoment1(ii)=max(cdata(:,end-1));
+                bendingMoment2(ii)=max(cdata(:,end));
+            else   %两个车道的车都有，各取相应车道1辆效应最大的车的效应叠加
+                l1=cdata;l2=cdata;
+                l1(l1(:,Lane_Id_Column)==2,:)=[];    %只保留车道1数据
+                l2(l2(:,Lane_Id_Column)==1,:)=[];    %只保留车道2数据
+                
+                bendingMoment1(ii)=max(l1(:,end-1))+max(l2(:,end));
+                bendingMoment2(ii)=max(l1(:,end))+max(l2(:,end-1));
+                
+            end
         end
     end
+    
+    bendingMoment1=bendingMoment1*(1+u);
+    bendingMoment2=bendingMoment2*(1+u);
+    TotalBendingMoment1=[TotalBendingMoment1 bendingMoment1];
+    TotalBendingMoment2=[TotalBendingMoment2 bendingMoment2];
 end
-
-bendingMoment=bendingMoment*(1+u);
 toc;
 
 
